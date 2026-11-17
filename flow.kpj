@@ -1,0 +1,25 @@
+// TS014 - Control Flow
+let cmd = read_token();
+if (cmd == "classify") {
+    let n = read_int();
+    if (n > 0) {
+        print("positive");
+    } else if (n < 0) {
+        print("negative");
+    } else {
+        print("zero");
+    }
+} else if (cmd == "nestedsum") {
+    let n = read_int();
+    let s = n * (n + 1) / 2;
+    print(s * s);
+} else if (cmd == "skipsum") {
+    let n = read_int();
+    let m = n / 3;
+    let total = n * (n + 1) / 2 - 3 * m * (m + 1) / 2;
+    let k = 0;
+    while (k * (k + 1) / 2 < n) {
+        k = k + 1;
+    }
+    print(total, k);
+}

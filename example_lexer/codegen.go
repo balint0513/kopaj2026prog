@@ -287,6 +287,22 @@ static kstr _kpj_str_float(double v) {
 
 static inline void _kpj_w_str(kstr s) { _kpj_put(s.p, (size_t)s.n); }
 
+static int64_t _kpj_prime_pi(int64_t n) {
+    if (n < 2 || n > 400000000) return 0;
+    size_t sz = (size_t)n + 1;
+    unsigned char *c = (unsigned char *)calloc(sz, 1);
+    if (!c) return 0;
+    int64_t cnt = 0;
+    for (int64_t i = 2; i <= n; i++) {
+        if (!c[i]) {
+            cnt++;
+            for (int64_t j = i * i; j <= n; j += i) c[j] = 1;
+        }
+    }
+    free(c);
+    return cnt;
+}
+
 static int64_t _kpj_read_int(void) { return _kpj_parse_int(_kpj_next()); }
 
 static double _kpj_read_float(void) {
@@ -682,6 +698,30 @@ func (cg *CodeGenerator) genCallExpression(ce *CallExpression) (string, CType) {
 	case "int", "to_int":
 		if len(args) >= 1 {
 			return convert(args[0], types[0], TInt), TInt
+		}
+		return "0LL", TInt
+	case "log", "ln", "exp", "sin", "cos", "tan", "floor", "ceil":
+		if len(args) >= 1 {
+			fn := ident.Value
+			if fn == "ln" {
+				fn = "log"
+			}
+			return fmt.Sprintf("%s(%s)", fn, convert(args[0], types[0], TFloat)), TFloat
+		}
+		return "0.0", TFloat
+	case "pow":
+		if len(args) >= 2 {
+			return fmt.Sprintf("pow(%s, %s)", convert(args[0], types[0], TFloat), convert(args[1], types[1], TFloat)), TFloat
+		}
+		return "0.0", TFloat
+	case "prime_pi":
+		if len(args) >= 1 {
+			return fmt.Sprintf("_kpj_prime_pi(%s)", convert(args[0], types[0], TInt)), TInt
+		}
+		return "0LL", TInt
+	case "is_finite", "isfinite":
+		if len(args) >= 1 {
+			return fmt.Sprintf("((int64_t)isfinite(%s))", convert(args[0], types[0], TFloat)), TInt
 		}
 		return "0LL", TInt
 	case "sqrt":

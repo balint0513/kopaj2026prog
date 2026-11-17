@@ -1,0 +1,30 @@
+// TS013 - Comparison & Logical Operators
+let cmd = read_token();
+if (cmd == "eq") {
+    let a = read_int(); let b = read_int();
+    print(a == b);
+} else if (cmd == "ne") {
+    let a = read_int(); let b = read_int();
+    print(a != b);
+} else if (cmd == "lt") {
+    let a = read_int(); let b = read_int();
+    print(a < b);
+} else if (cmd == "gt") {
+    let a = read_int(); let b = read_int();
+    print(a > b);
+} else if (cmd == "le") {
+    let a = read_int(); let b = read_int();
+    print(a <= b);
+} else if (cmd == "ge") {
+    let a = read_int(); let b = read_int();
+    print(a >= b);
+} else if (cmd == "and") {
+    let a = read_int(); let b = read_int();
+    print(a != 0 && b != 0);
+} else if (cmd == "or") {
+    let a = read_int(); let b = read_int();
+    print(a != 0 || b != 0);
+} else if (cmd == "not") {
+    let a = read_int();
+    print(a == 0);
+}

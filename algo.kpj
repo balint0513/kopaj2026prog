@@ -1,0 +1,63 @@
+// TS016 - Core Algorithms
+fn is_prime(n) {
+    if (n < 2) { return 0; }
+    if (n < 4) { return 1; }
+    if (n % 2 == 0) { return 0; }
+    let i = 3;
+    while (i * i <= n) {
+        if (n % i == 0) { return 0; }
+        i = i + 2;
+    }
+    return 1;
+}
+
+let cmd = read_token();
+if (cmd == "gcd") {
+    let a = read_int();
+    let b = read_int();
+    while (b != 0) {
+        let t = a % b;
+        a = b;
+        b = t;
+    }
+    print(a);
+} else if (cmd == "prime") {
+    let n = read_int();
+    if (is_prime(n) == 1) { print("prime"); } else { print("composite"); }
+} else if (cmd == "primecount") {
+    let n = read_int();
+    let c = prime_pi(n);
+    print(c);
+} else if (cmd == "fib") {
+    let n = read_int();
+    let a = 0;
+    let b = 1;
+    let i = 0;
+    while (i < n) {
+        let t = a + b;
+        a = b;
+        b = t;
+        i = i + 1;
+    }
+    print(a);
+} else if (cmd == "powmod") {
+    let base = read_int();
+    let e = read_int();
+    let m = read_int();
+    let r = 1 % m;
+    base = base % m;
+    while (e > 0) {
+        if (e % 2 == 1) { r = r * base % m; }
+        base = base * base % m;
+        e = e / 2;
+    }
+    print(r);
+} else if (cmd == "collatz") {
+    let n = read_int();
+    let steps = 0;
+    while (n != 1 && n > 0) {
+        if (n % 2 == 0) { n = n / 2; } else { n = 3 * n + 1; }
+        steps = steps + 1;
+    }
+    print(steps);
+}
