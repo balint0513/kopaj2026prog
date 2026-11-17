@@ -38,8 +38,8 @@ fn convert(code: &str, from: CType, to: CType) -> String {
 fn to_str(code: &str, t: CType) -> String {
     match t {
         CType::Str => code.to_string(),
-        CType::Float => format!("_kpj_str_float({})", code),
-        CType::Int => format!("_kpj_str_int({})", code),
+        CType::Float => format!("_kpj_str_float(ctx, {})", code),
+        CType::Int => format!("_kpj_str_int(ctx, {})", code),
     }
 }
 
@@ -197,14 +197,14 @@ impl CodeGenerator {
                         self.buf().push_str(&format!("return {};\n", conv));
                     } else {
                         self.buf()
-                            .push_str(&format!("_kpj_exit((int)({}));\n", conv));
+                            .push_str(&format!("_kpj_exit(ctx, (int)({}));\n", conv));
                     }
                 } else {
                     self.write_indent();
                     if self.in_func {
                         self.buf().push_str("return 0;\n");
                     } else {
-                        self.buf().push_str("_kpj_exit(0);\n");
+                        self.buf().push_str("_kpj_exit(ctx, 0);\n");
                     }
                 }
             }
@@ -232,16 +232,13 @@ impl CodeGenerator {
                 self.in_func = true;
 
                 self.push_scope();
-                let mut params = Vec::with_capacity(parameters.len());
+                let mut params = Vec::with_capacity(parameters.len() + 1);
+                params.push("KpjCtx *ctx".to_string());
                 for p in parameters {
                     self.declare_var(p, CType::Int);
                     params.push(format!("int64_t {}", Self::c_var_name(p)));
                 }
-                let param_list = if params.is_empty() {
-                    "void".to_string()
-                } else {
-                    params.join(", ")
-                };
+                let param_list = params.join(", ");
 
                 self.functions.push_str(&format!(
                     "static inline int64_t {}({}) {{\n",
@@ -384,7 +381,7 @@ impl CodeGenerator {
                     let ls = to_str(&l_code, lt);
                     let rs = to_str(&r_code, rt);
                     return match operator.as_str() {
-                        "+" => (format!("_kpj_cat({}, {})", ls, rs), CType::Str),
+                        "+" => (format!("_kpj_cat(ctx, {}, {})", ls, rs), CType::Str),
                         "==" => (format!("_kpj_seq({}, {})", ls, rs), CType::Int),
                         "!=" => (format!("(!_kpj_seq({}, {}))", ls, rs), CType::Int),
                         "<" | ">" | "<=" | ">=" => (
@@ -524,22 +521,25 @@ impl CodeGenerator {
 
         match ident {
             "read_int" | "scan_int" | "input_int" | "read" => {
-                ("_kpj_read_int()".to_string(), CType::Int)
+                ("_kpj_read_int(ctx)".to_string(), CType::Int)
             }
             "read_float" | "scan_float" | "input_float" | "read_double" => {
-                ("_kpj_read_float()".to_string(), CType::Float)
+                ("_kpj_read_float(ctx)".to_string(), CType::Float)
             }
             "arg_int" | "arg" => {
                 if !args.is_empty() {
                     (
-                        format!("_kpj_arg_int({})", convert(&args[0], types[0], CType::Int)),
+                        format!(
+                            "_kpj_arg_int(ctx, {})",
+                            convert(&args[0], types[0], CType::Int)
+                        ),
                         CType::Int,
                     )
                 } else {
                     ("0LL".to_string(), CType::Int)
                 }
             }
-            "argc" | "arg_count" => ("_kpj_argc_fn()".to_string(), CType::Int),
+            "argc" | "arg_count" => ("_kpj_argc_fn(ctx)".to_string(), CType::Int),
             "float" | "to_float" => {
                 if !args.is_empty() {
                     (convert(&args[0], types[0], CType::Float), CType::Float)
@@ -586,7 +586,10 @@ impl CodeGenerator {
             "prime_pi" => {
                 if !args.is_empty() {
                     (
-                        format!("_kpj_prime_pi({})", convert(&args[0], types[0], CType::Int)),
+                        format!(
+                            "_kpj_prime_pi(ctx, {})",
+                            convert(&args[0], types[0], CType::Int)
+                        ),
                         CType::Int,
                     )
                 } else {
@@ -620,22 +623,22 @@ impl CodeGenerator {
                 let mut parts = Vec::with_capacity(2 * args.len() + 2);
                 for i in 0..args.len() {
                     if i > 0 {
-                        parts.push("_kpj_putc(' ')".to_string());
+                        parts.push("_kpj_putc(ctx, ' ')".to_string());
                     }
                     match types[i] {
-                        CType::Float => parts.push(format!("_kpj_w_float({})", args[i])),
-                        CType::Str => parts.push(format!("_kpj_w_str({})", args[i])),
-                        CType::Int => parts.push(format!("_kpj_w_int({})", args[i])),
+                        CType::Float => parts.push(format!("_kpj_w_float(ctx, {})", args[i])),
+                        CType::Str => parts.push(format!("_kpj_w_str(ctx, {})", args[i])),
+                        CType::Int => parts.push(format!("_kpj_w_int(ctx, {})", args[i])),
                     }
                 }
-                parts.push("_kpj_putc('\\n')".to_string());
+                parts.push("_kpj_putc(ctx, '\\n')".to_string());
                 parts.push("0LL".to_string());
                 (format!("({})", parts.join(", ")), CType::Int)
             }
             "read_token" | "read_word" | "read_str" | "read_string" => {
-                ("_kpj_read_token()".to_string(), CType::Str)
+                ("_kpj_read_token(ctx)".to_string(), CType::Str)
             }
-            "read_line" => ("_kpj_read_line()".to_string(), CType::Str),
+            "read_line" => ("_kpj_read_line(ctx)".to_string(), CType::Str),
             "len" | "length" | "strlen" => {
                 if !args.is_empty() {
                     (format!("_kpj_len({})", args[0]), CType::Int)
@@ -645,14 +648,14 @@ impl CodeGenerator {
             }
             "upper" | "to_upper" => {
                 if !args.is_empty() {
-                    (format!("_kpj_upper({})", args[0]), CType::Str)
+                    (format!("_kpj_upper(ctx, {})", args[0]), CType::Str)
                 } else {
                     ("_kpj_mk(\"\", 0)".to_string(), CType::Str)
                 }
             }
             "lower" | "to_lower" => {
                 if !args.is_empty() {
-                    (format!("_kpj_lower({})", args[0]), CType::Str)
+                    (format!("_kpj_lower(ctx, {})", args[0]), CType::Str)
                 } else {
                     ("_kpj_mk(\"\", 0)".to_string(), CType::Str)
                 }
@@ -699,7 +702,7 @@ impl CodeGenerator {
                 } else {
                     "0".to_string()
                 };
-                (format!("(_kpj_exit({}), 0LL)", code), CType::Int)
+                (format!("(_kpj_exit(ctx, {}), 0LL)", code), CType::Int)
             }
             "abs" => {
                 if !args.is_empty() {
@@ -737,13 +740,13 @@ impl CodeGenerator {
                 }
             }
             _ => {
-                let ints: Vec<String> = args
-                    .iter()
-                    .zip(types.iter())
-                    .map(|(a, &t)| convert(a, t, CType::Int))
-                    .collect();
+                let mut call_args = Vec::with_capacity(args.len() + 1);
+                call_args.push("ctx".to_string());
+                for (a, &t) in args.iter().zip(types.iter()) {
+                    call_args.push(convert(a, t, CType::Int));
+                }
                 (
-                    format!("{}({})", Self::c_func_name(ident), ints.join(", ")),
+                    format!("{}({})", Self::c_func_name(ident), call_args.join(", ")),
                     CType::Int,
                 )
             }
@@ -757,18 +760,17 @@ pub fn generate_c(program: &Program) -> String {
         cg.gen_statement(stmt);
     }
 
-    let mut out = String::with_capacity(C_RUNTIME.len() + cg.functions.len() + cg.main_body.len() + 256);
+    let mut out = String::with_capacity(
+        C_RUNTIME.len() + cg.functions.len() + cg.main_body.len() + 256,
+    );
     out.push_str(C_RUNTIME);
     if !cg.functions.is_empty() {
         out.push_str(&cg.functions);
         out.push('\n');
     }
-    out.push_str("int main(int argc, char **argv) {\n");
-    out.push_str("    _kpj_argc = argc;\n");
-    out.push_str("    _kpj_argv = argv;\n");
-    out.push_str("    if (kopaj_flag[0] == '\\0') _kpj_exit(1);\n");
+    out.push_str("static __attribute__((always_inline)) inline int _kpj_main(KpjCtx *ctx) {\n");
     out.push_str(&cg.main_body);
-    out.push_str("    _kpj_exit(0);\n}\n");
+    out.push_str("    return 0;\n}\n");
     out
 }
 

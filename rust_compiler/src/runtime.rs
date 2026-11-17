@@ -48,13 +48,22 @@ size_t strlen(const char *s) { const char *p = s; while (*p) p++; return (size_t
 #include <string.h>
 #endif
 
-static int _kpj_argc = 0;
-static char **_kpj_argv = 0;
-static int _kpj_nread = 0;
+typedef struct { const char *p; int64_t n; } kstr;
 
-/* ---------------- compact single-page I/O & scratch buffers ---------------- */
-static char _kpj_out[2048];
-static size_t _kpj_outn = 0;
+/* All mutable runtime state lives on the initial stack (zero .data, zero .bss, zero extra VMAs) */
+typedef struct {
+    int argc;
+    int nread;
+    char **argv;
+    size_t outn;
+    size_t inlen;
+    size_t inpos;
+    int loaded;
+    size_t hoff;
+    char out[1024];
+    char in[1024];
+    char heap[1024] __attribute__((aligned(16)));
+} KpjCtx;
 
 static inline void _kpj_rawwrite(const char *p, size_t n) {
     while (n) {
@@ -64,87 +73,88 @@ static inline void _kpj_rawwrite(const char *p, size_t n) {
         p += w; n -= (size_t)w;
     }
 }
-static inline void _kpj_flush(void) {
-    if (_kpj_outn) { _kpj_rawwrite(_kpj_out, _kpj_outn); _kpj_outn = 0; }
+static inline void _kpj_flush(KpjCtx *ctx) {
+    if (ctx->outn) { _kpj_rawwrite(ctx->out, ctx->outn); ctx->outn = 0; }
 }
 
-static __attribute__((always_inline)) inline void _kpj_put(const char *s, size_t n) {
-    if (__builtin_expect(n > sizeof(_kpj_out) - _kpj_outn, 0)) {
-        _kpj_flush();
-        if (n > sizeof(_kpj_out)) { _kpj_rawwrite(s, n); return; }
+static __attribute__((always_inline)) inline void _kpj_put(KpjCtx *ctx, const char *s, size_t n) {
+    if (__builtin_expect(n > sizeof(ctx->out) - ctx->outn, 0)) {
+        _kpj_flush(ctx);
+        if (n > sizeof(ctx->out)) { _kpj_rawwrite(s, n); return; }
     }
-    for (size_t i = 0; i < n; i++) _kpj_out[_kpj_outn + i] = s[i];
-    _kpj_outn += n;
+    for (size_t i = 0; i < n; i++) ctx->out[ctx->outn + i] = s[i];
+    ctx->outn += n;
 }
-static __attribute__((always_inline)) inline void _kpj_putc(char c) {
-    if (__builtin_expect(_kpj_outn == sizeof(_kpj_out), 0)) _kpj_flush();
-    _kpj_out[_kpj_outn++] = c;
+static __attribute__((always_inline)) inline void _kpj_putc(KpjCtx *ctx, char c) {
+    if (__builtin_expect(ctx->outn == sizeof(ctx->out), 0)) _kpj_flush(ctx);
+    ctx->out[ctx->outn++] = c;
 }
 
-__attribute__((noreturn, always_inline)) static inline void _kpj_exit(int code) {
-    _kpj_flush();
+__attribute__((noreturn, always_inline)) static inline void _kpj_exit(KpjCtx *ctx, int code) {
+    _kpj_flush(ctx);
     for (;;) _kpj_sys3(231, code, 0, 0);
 }
 
-/* Small scratch arena in BSS (1 KB) + on-demand mmap fallback */
-static char _kpj_heap0[1024] __attribute__((aligned(16)));
-static size_t _kpj_hoff = 0;
-
-static inline void *_kpj_alloc(size_t n) {
+static inline void *_kpj_alloc(KpjCtx *ctx, size_t n) {
     n = (n + 15) & ~(size_t)15;
-    if (__builtin_expect(_kpj_hoff + n <= sizeof(_kpj_heap0), 1)) {
-        void *p = _kpj_heap0 + _kpj_hoff;
-        _kpj_hoff += n;
+    if (__builtin_expect(ctx->hoff + n <= sizeof(ctx->heap), 1)) {
+        void *p = ctx->heap + ctx->hoff;
+        ctx->hoff += n;
         return p;
     }
     size_t c = (n + 4095) & ~(size_t)4095;
     long r = _kpj_sys6(9, 0, (long)c, 3, 0x22, -1, 0);
-    if (r < 0 && r > -4096) { _kpj_put("error\n", 6); _kpj_exit(1); }
+    if (r < 0 && r > -4096) { _kpj_put(ctx, "error\n", 6); _kpj_exit(ctx, 1); }
     return (void *)r;
 }
 
 /* ---------------- input: zero-syscall argv fast-path + single-read stdin ---------------- */
-static char _kpj_in[1024];
-static size_t _kpj_inlen = 0, _kpj_inpos = 0;
-static int _kpj_loaded = 0;
-static size_t _kpj_toklen = 0;
-
-static inline void _kpj_load_stdin(void) {
-    _kpj_loaded = 1;
+static inline void _kpj_load_stdin(KpjCtx *ctx) {
+    ctx->loaded = 1;
     for (;;) {
-        long r = _kpj_sys3(0, 0, (long)_kpj_in, (long)(sizeof(_kpj_in) - 1));
+        long r = _kpj_sys3(0, 0, (long)ctx->in, (long)(sizeof(ctx->in) - 1));
         if (r == -4) continue;
-        if (r > 0) _kpj_inlen = (size_t)r;
+        if (r > 0) ctx->inlen = (size_t)r;
         break;
     }
-    _kpj_in[_kpj_inlen] = 0;
+    ctx->in[ctx->inlen] = 0;
 }
 
-static inline const char *_kpj_tok(void) {
-    if (!_kpj_loaded) _kpj_load_stdin();
-    while (_kpj_inpos < _kpj_inlen && (unsigned char)_kpj_in[_kpj_inpos] <= ' ') _kpj_inpos++;
-    if (_kpj_inpos >= _kpj_inlen) { _kpj_toklen = 0; return 0; }
-    size_t st = _kpj_inpos;
-    while (_kpj_inpos < _kpj_inlen && (unsigned char)_kpj_in[_kpj_inpos] > ' ') _kpj_inpos++;
-    _kpj_toklen = _kpj_inpos - st;
-    return _kpj_in + st;
+static inline kstr _kpj_tok(KpjCtx *ctx) {
+    if (!ctx->loaded) _kpj_load_stdin(ctx);
+    while (ctx->inpos < ctx->inlen && (unsigned char)ctx->in[ctx->inpos] <= ' ') ctx->inpos++;
+    if (ctx->inpos >= ctx->inlen) { kstr z = {"", 0}; return z; }
+    size_t st = ctx->inpos;
+    while (ctx->inpos < ctx->inlen && (unsigned char)ctx->in[ctx->inpos] > ' ') ctx->inpos++;
+    kstr res = {ctx->in + st, (int64_t)(ctx->inpos - st)};
+    return res;
 }
 
-static __attribute__((always_inline)) inline const char *_kpj_next(void) {
-    int idx = ++_kpj_nread;
-    if (__builtin_expect(_kpj_argc > 1, 1)) {
-        if (__builtin_expect(idx < _kpj_argc, 1)) {
-            const char *s = _kpj_argv[idx];
+/* Fast raw pointer for numeric parsers: no length scan needed on argv! */
+static __attribute__((always_inline)) inline const char *_kpj_next_raw(KpjCtx *ctx) {
+    int idx = ++ctx->nread;
+    if (__builtin_expect(ctx->argc > 1, 1)) {
+        return __builtin_expect(idx < ctx->argc, 1) ? ctx->argv[idx] : 0;
+    }
+    kstr t = _kpj_tok(ctx);
+    return t.n ? t.p : 0;
+}
+
+static __attribute__((always_inline)) inline kstr _kpj_read_token(KpjCtx *ctx) {
+    int idx = ++ctx->nread;
+    if (__builtin_expect(ctx->argc > 1, 1)) {
+        if (__builtin_expect(idx < ctx->argc, 1)) {
+            const char *s = ctx->argv[idx];
             while (*s && (unsigned char)*s <= ' ') s++;
             const char *e = s;
             while (*e && (unsigned char)*e > ' ') e++;
-            _kpj_toklen = (size_t)(e - s);
-            return _kpj_toklen ? s : 0;
+            kstr res = {s, (int64_t)(e - s)};
+            return res;
         }
-        _kpj_toklen = 0;
-        return 0;
+        kstr z = {"", 0};
+        return z;
     }
-    return _kpj_tok();
+    return _kpj_tok(ctx);
 }
 
 /* ---------------- numbers ---------------- */
@@ -201,14 +211,14 @@ static inline double _kpj_parse_float(const char *s) {
     return neg ? -d : d;
 }
 
-static __attribute__((always_inline)) inline int64_t _kpj_read_int(void) { return _kpj_parse_int(_kpj_next()); }
-static inline double _kpj_read_float(void) { return _kpj_parse_float(_kpj_next()); }
+static __attribute__((always_inline)) inline int64_t _kpj_read_int(KpjCtx *ctx) { return _kpj_parse_int(_kpj_next_raw(ctx)); }
+static inline double _kpj_read_float(KpjCtx *ctx) { return _kpj_parse_float(_kpj_next_raw(ctx)); }
 
-static inline int64_t _kpj_arg_int(int64_t idx) {
-    if (idx >= 0 && idx < (int64_t)_kpj_argc) return _kpj_parse_int(_kpj_argv[idx]);
+static inline int64_t _kpj_arg_int(KpjCtx *ctx, int64_t idx) {
+    if (idx >= 0 && idx < (int64_t)ctx->argc) return _kpj_parse_int(ctx->argv[idx]);
     return 0;
 }
-static inline int64_t _kpj_argc_fn(void) { return (int64_t)(_kpj_argc > 0 ? _kpj_argc - 1 : 0); }
+static inline int64_t _kpj_argc_fn(KpjCtx *ctx) { return (int64_t)(ctx->argc > 0 ? ctx->argc - 1 : 0); }
 
 static inline int _kpj_fmt_int(char *out, int64_t v) {
     char b[24]; char *e = b + sizeof(b), *p = e;
@@ -220,12 +230,12 @@ static inline int _kpj_fmt_int(char *out, int64_t v) {
     return n;
 }
 
-static __attribute__((always_inline)) inline void _kpj_w_int(int64_t v) {
+static __attribute__((always_inline)) inline void _kpj_w_int(KpjCtx *ctx, int64_t v) {
     char b[24]; char *e = b + sizeof(b), *p = e;
     uint64_t u = v < 0 ? (0 - (uint64_t)v) : (uint64_t)v;
     do { *--p = (char)('0' + u % 10); u /= 10; } while (u);
     if (v < 0) *--p = '-';
-    _kpj_put(p, (size_t)(e - p));
+    _kpj_put(ctx, p, (size_t)(e - p));
 }
 
 static inline int _kpj_fmt_float(char *o, double v) {
@@ -266,10 +276,10 @@ static inline int _kpj_fmt_float(char *o, double v) {
     return n;
 }
 
-static inline void _kpj_w_float(double v) {
+static inline void _kpj_w_float(KpjCtx *ctx, double v) {
     char b[48];
     int n = _kpj_fmt_float(b, v);
-    _kpj_put(b, (size_t)n);
+    _kpj_put(ctx, b, (size_t)n);
 }
 
 static __attribute__((always_inline)) inline int64_t _kpj_div(int64_t a, int64_t b) {
@@ -373,7 +383,7 @@ static inline double _kpj_fmod(double a, double b) {
 }
 
 /* L1-cache bitset odd-only sieve of Eratosthenes on stack (zero mmap for N <= 200000) */
-static inline int64_t _kpj_prime_pi(int64_t n) {
+static inline int64_t _kpj_prime_pi(KpjCtx *ctx, int64_t n) {
     if (n < 2) return 0;
     int64_t half = (n - 1) >> 1;
     uint64_t stack_bits[1600];
@@ -382,7 +392,7 @@ static inline int64_t _kpj_prime_pi(int64_t n) {
     if (__builtin_expect(nwords <= 1600, 1)) {
         for (size_t i = 0; i < nwords; i++) bits[i] = 0;
     } else {
-        bits = (uint64_t *)_kpj_alloc(nwords * sizeof(uint64_t));
+        bits = (uint64_t *)_kpj_alloc(ctx, nwords * sizeof(uint64_t));
     }
     bits[0] = 1ULL;
     for (int64_t i = 1; ; i++) {
@@ -405,37 +415,29 @@ static inline int64_t _kpj_prime_pi(int64_t n) {
 }
 
 /* ---------------- strings ---------------- */
-typedef struct { const char *p; int64_t n; } kstr;
+static __attribute__((always_inline)) inline kstr _kpj_mk(const char *p, int64_t n) { kstr s = {p, n}; return s; }
 
-static __attribute__((always_inline)) inline kstr _kpj_mk(const char *p, int64_t n) { kstr s; s.p = p; s.n = n; return s; }
-
-static __attribute__((always_inline)) inline kstr _kpj_read_token(void) {
-    const char *s = _kpj_next();
-    if (!s) return _kpj_mk("", 0);
-    return _kpj_mk(s, (int64_t)_kpj_toklen);
-}
-
-static inline kstr _kpj_read_line(void) {
-    if (!_kpj_loaded) _kpj_load_stdin();
-    while (_kpj_inpos < _kpj_inlen && (_kpj_in[_kpj_inpos] == ' ' || _kpj_in[_kpj_inpos] == '\t')) _kpj_inpos++;
-    if (_kpj_inpos >= _kpj_inlen) return _kpj_mk("", 0);
-    size_t st = _kpj_inpos;
-    while (_kpj_inpos < _kpj_inlen && _kpj_in[_kpj_inpos] != '\n') _kpj_inpos++;
-    size_t en = _kpj_inpos;
-    if (_kpj_inpos < _kpj_inlen) _kpj_inpos++;
-    while (en > st && (_kpj_in[en - 1] == '\r' || _kpj_in[en - 1] == ' ' || _kpj_in[en - 1] == '\t')) en--;
-    return _kpj_mk(_kpj_in + st, (int64_t)(en - st));
+static inline kstr _kpj_read_line(KpjCtx *ctx) {
+    if (!ctx->loaded) _kpj_load_stdin(ctx);
+    while (ctx->inpos < ctx->inlen && (ctx->in[ctx->inpos] == ' ' || ctx->in[ctx->inpos] == '\t')) ctx->inpos++;
+    if (ctx->inpos >= ctx->inlen) return _kpj_mk("", 0);
+    size_t st = ctx->inpos;
+    while (ctx->inpos < ctx->inlen && ctx->in[ctx->inpos] != '\n') ctx->inpos++;
+    size_t en = ctx->inpos;
+    if (ctx->inpos < ctx->inlen) ctx->inpos++;
+    while (en > st && (ctx->in[en - 1] == '\r' || ctx->in[en - 1] == ' ' || ctx->in[en - 1] == '\t')) en--;
+    return _kpj_mk(ctx->in + st, (int64_t)(en - st));
 }
 
 static __attribute__((always_inline)) inline int64_t _kpj_len(kstr s) { return s.n; }
 
-static inline kstr _kpj_upper(kstr s) {
-    char *b = (char *)_kpj_alloc((size_t)s.n + 1);
+static inline kstr _kpj_upper(KpjCtx *ctx, kstr s) {
+    char *b = (char *)_kpj_alloc(ctx, (size_t)s.n + 1);
     for (int64_t i = 0; i < s.n; i++) { char c = s.p[i]; b[i] = (char)((unsigned)(c - 'a') < 26u ? c - 32 : c); }
     return _kpj_mk(b, s.n);
 }
-static inline kstr _kpj_lower(kstr s) {
-    char *b = (char *)_kpj_alloc((size_t)s.n + 1);
+static inline kstr _kpj_lower(KpjCtx *ctx, kstr s) {
+    char *b = (char *)_kpj_alloc(ctx, (size_t)s.n + 1);
     for (int64_t i = 0; i < s.n; i++) { char c = s.p[i]; b[i] = (char)((unsigned)(c - 'A') < 26u ? c + 32 : c); }
     return _kpj_mk(b, s.n);
 }
@@ -450,11 +452,11 @@ static __attribute__((always_inline)) inline kstr _kpj_substr(kstr s, int64_t st
     if (len > s.n - st) len = s.n - st;
     return _kpj_mk(s.p + st, len);
 }
-static inline kstr _kpj_cat(kstr a, kstr b) {
+static inline kstr _kpj_cat(KpjCtx *ctx, kstr a, kstr b) {
     if (!b.n) return a;
     if (!a.n) return b;
     if (a.p + a.n == b.p) return _kpj_mk(a.p, a.n + b.n);
-    char *r = (char *)_kpj_alloc((size_t)(a.n + b.n) + 1);
+    char *r = (char *)_kpj_alloc(ctx, (size_t)(a.n + b.n) + 1);
     for (int64_t i = 0; i < a.n; i++) r[i] = a.p[i];
     for (int64_t i = 0; i < b.n; i++) r[a.n + i] = b.p[i];
     return _kpj_mk(r, a.n + b.n);
@@ -467,32 +469,52 @@ static inline int _kpj_scmp(kstr a, kstr b) {
     }
     return a.n < b.n ? -1 : (a.n > b.n ? 1 : 0);
 }
+/* __builtin_memcmp with constant length compiles to a single 16/32/64-bit register cmp! */
 static __attribute__((always_inline)) inline int64_t _kpj_seq(kstr a, kstr b) {
-    if (a.n != b.n) return 0;
-    for (int64_t i = 0; i < a.n; i++) if (a.p[i] != b.p[i]) return 0;
-    return 1;
+    return a.n == b.n && (b.n == 0 || __builtin_memcmp(a.p, b.p, (size_t)b.n) == 0);
 }
-static inline kstr _kpj_str_int(int64_t v) {
-    char *b = (char *)_kpj_alloc(24);
+static inline kstr _kpj_str_int(KpjCtx *ctx, int64_t v) {
+    char *b = (char *)_kpj_alloc(ctx, 24);
     return _kpj_mk(b, _kpj_fmt_int(b, v));
 }
-static inline kstr _kpj_str_float(double v) {
-    char *b = (char *)_kpj_alloc(48);
+static inline kstr _kpj_str_float(KpjCtx *ctx, double v) {
+    char *b = (char *)_kpj_alloc(ctx, 48);
     return _kpj_mk(b, _kpj_fmt_float(b, v));
 }
-static __attribute__((always_inline)) inline void _kpj_w_str(kstr s) { _kpj_put(s.p, (size_t)s.n); }
+static __attribute__((always_inline)) inline void _kpj_w_str(KpjCtx *ctx, kstr s) { _kpj_put(ctx, s.p, (size_t)s.n); }
 
-int main(int argc, char **argv);
+static __attribute__((always_inline)) inline int _kpj_main(KpjCtx *ctx);
 
 #ifdef KPJ_FREESTANDING
 __attribute__((used, noreturn)) void _kpj_cstart(long *sp) {
-    int argc = (int)sp[0];
-    char **argv = (char **)(sp + 1);
+    KpjCtx ctx;
+    ctx.argc = (int)sp[0];
+    ctx.nread = 0;
+    ctx.argv = (char **)(sp + 1);
+    ctx.outn = 0;
+    ctx.inlen = 0;
+    ctx.inpos = 0;
+    ctx.loaded = 0;
+    ctx.hoff = 0;
     __asm__ volatile ("" : : "r"(kopaj_flag) : "memory");
-    _kpj_exit(main(argc, argv));
+    _kpj_exit(&ctx, _kpj_main(&ctx));
 }
 __asm__(".text\n.globl _start\n.type _start,@function\n_start:\n"
         "  xor %ebp, %ebp\n  mov %rsp, %rdi\n  and $-16, %rsp\n  call _kpj_cstart\n  hlt\n");
+#else
+int main(int argc, char **argv) {
+    KpjCtx ctx;
+    ctx.argc = argc;
+    ctx.nread = 0;
+    ctx.argv = argv;
+    ctx.outn = 0;
+    ctx.inlen = 0;
+    ctx.inpos = 0;
+    ctx.loaded = 0;
+    ctx.hoff = 0;
+    if (kopaj_flag[0] == '\0') return 1;
+    _kpj_exit(&ctx, _kpj_main(&ctx));
+}
 #endif
 
 "##;
