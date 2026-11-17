@@ -822,6 +822,17 @@ func runCC(ccBin string, args []string) (string, error) {
 }
 
 func CompileToBinary(program *Program, outputPath string) error {
+	// Fast path: in-memory native backend (no gcc). Falls back to C on any
+	// unsupported construct. KOPAJ_BACKEND=gcc forces the C path.
+	if os.Getenv("KOPAJ_BACKEND") != "gcc" {
+		err := CompileNative(program, outputPath)
+		if err == nil {
+			return nil
+		}
+		if os.Getenv("KOPAJ_DEBUG") != "" {
+			fmt.Fprintf(os.Stderr, "native backend failed, falling back to gcc: %v\n", err)
+		}
+	}
 	cCode := GenerateC(program)
 
 	tmpFile, err := os.CreateTemp("", "kopaj-*.c")
