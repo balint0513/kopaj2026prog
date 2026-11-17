@@ -17,17 +17,21 @@ type CType int
 const (
 	TInt CType = iota
 	TFloat
+	TStr
 )
 
 func (t CType) cName() string {
-	if t == TFloat {
+	switch t {
+	case TFloat:
 		return "double"
+	case TStr:
+		return "kstr"
 	}
 	return "int64_t"
 }
 
 func convert(code string, from, to CType) string {
-	if from == to {
+	if from == to || from == TStr || to == TStr {
 		return code
 	}
 	if to == TFloat {
@@ -129,7 +133,19 @@ static void _kpj_flush(void) {
 }
 
 static inline void _kpj_put(const char *s, size_t n) {
-    if (n > sizeof(_kpj_out) - _kpj_outn) _kpj_flush();
+    if (n > sizeof(_kpj_out) - _kpj_outn) {
+        _kpj_flush();
+        if (n > sizeof(_kpj_out)) {
+            size_t off = 0;
+            while (off < n) {
+                ssize_t w = write(1, s + off, n - off);
+                if (w < 0) { if (errno == EINTR) continue; break; }
+                if (w == 0) break;
+                off += (size_t)w;
+            }
+            return;
+        }
+    }
     memcpy(_kpj_out + _kpj_outn, s, n);
     _kpj_outn += n;
 }
@@ -159,19 +175,22 @@ static void _kpj_load(void) {
     _kpj_in[_kpj_inlen] = 0;
 }
 
+static size_t _kpj_toklen = 0;
+
 static const char *_kpj_tok(void) {
     if (!_kpj_loaded) _kpj_load();
     while (_kpj_inpos < _kpj_inlen && (unsigned char)_kpj_in[_kpj_inpos] <= ' ') _kpj_inpos++;
     if (_kpj_inpos >= _kpj_inlen) return NULL;
     const char *s = _kpj_in + _kpj_inpos;
     while (_kpj_inpos < _kpj_inlen && (unsigned char)_kpj_in[_kpj_inpos] > ' ') _kpj_inpos++;
+    _kpj_toklen = (size_t)(_kpj_in + _kpj_inpos - s);
     return s;
 }
 
 static const char *_kpj_next(void) {
     _kpj_nread++;
     const char *s = _kpj_tok();
-    if (!s && _kpj_nread < _kpj_argc) s = _kpj_argv[_kpj_nread];
+    if (!s && _kpj_nread < _kpj_argc) { s = _kpj_argv[_kpj_nread]; _kpj_toklen = strlen(s); }
     return s;
 }
 
@@ -183,6 +202,90 @@ static inline int64_t _kpj_parse_int(const char *s) {
     while (*s >= '0' && *s <= '9') { u = u * 10 + (uint64_t)(*s - '0'); s++; }
     return (int64_t)(neg ? (0 - u) : u);
 }
+
+
+typedef struct { const char *p; int64_t n; } kstr;
+
+static inline kstr _kpj_mk(const char *p, int64_t n) { kstr s; s.p = p; s.n = n; return s; }
+
+static kstr _kpj_read_token(void) {
+    const char *s = _kpj_next();
+    if (!s) return _kpj_mk("", 0);
+    return _kpj_mk(s, (int64_t)_kpj_toklen);
+}
+
+static kstr _kpj_read_line(void) {
+    if (!_kpj_loaded) _kpj_load();
+    while (_kpj_inpos < _kpj_inlen && (_kpj_in[_kpj_inpos] == ' ' || _kpj_in[_kpj_inpos] == '\t')) _kpj_inpos++;
+    size_t st = _kpj_inpos;
+    while (_kpj_inpos < _kpj_inlen && _kpj_in[_kpj_inpos] != '\n') _kpj_inpos++;
+    size_t en = _kpj_inpos;
+    if (_kpj_inpos < _kpj_inlen) _kpj_inpos++;
+    while (en > st && (_kpj_in[en - 1] == '\r' || _kpj_in[en - 1] == ' ' || _kpj_in[en - 1] == '\t')) en--;
+    return _kpj_mk(_kpj_in + st, (int64_t)(en - st));
+}
+
+static inline int64_t _kpj_len(kstr s) { return s.n; }
+
+static kstr _kpj_upper(kstr s) {
+    char *b = (char *)malloc((size_t)s.n + 1);
+    for (int64_t i = 0; i < s.n; i++) { char c = s.p[i]; b[i] = (c >= 'a' && c <= 'z') ? (char)(c - 32) : c; }
+    b[s.n] = 0;
+    return _kpj_mk(b, s.n);
+}
+
+static kstr _kpj_lower(kstr s) {
+    char *b = (char *)malloc((size_t)s.n + 1);
+    for (int64_t i = 0; i < s.n; i++) { char c = s.p[i]; b[i] = (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c; }
+    b[s.n] = 0;
+    return _kpj_mk(b, s.n);
+}
+
+static inline kstr _kpj_char_at(kstr s, int64_t i) {
+    if (i < 0 || i >= s.n) return _kpj_mk("", 0);
+    return _kpj_mk(s.p + i, 1);
+}
+
+static inline kstr _kpj_substr(kstr s, int64_t st, int64_t len) {
+    if (st < 0) st = 0;
+    if (st > s.n) st = s.n;
+    if (len < 0) len = 0;
+    if (len > s.n - st) len = s.n - st;
+    return _kpj_mk(s.p + st, len);
+}
+
+static kstr _kpj_cat(kstr a, kstr b) {
+    char *r = (char *)malloc((size_t)(a.n + b.n) + 1);
+    memcpy(r, a.p, (size_t)a.n);
+    memcpy(r + a.n, b.p, (size_t)b.n);
+    r[a.n + b.n] = 0;
+    return _kpj_mk(r, a.n + b.n);
+}
+
+static inline int _kpj_scmp(kstr a, kstr b) {
+    int64_t m = a.n < b.n ? a.n : b.n;
+    int c = m ? memcmp(a.p, b.p, (size_t)m) : 0;
+    if (c) return c;
+    return a.n < b.n ? -1 : (a.n > b.n ? 1 : 0);
+}
+
+static inline int64_t _kpj_seq(kstr a, kstr b) {
+    return a.n == b.n && (a.n == 0 || memcmp(a.p, b.p, (size_t)a.n) == 0);
+}
+
+static kstr _kpj_str_int(int64_t v) {
+    char *b = (char *)malloc(24);
+    int n = snprintf(b, 24, "%lld", (long long)v);
+    return _kpj_mk(b, n);
+}
+
+static kstr _kpj_str_float(double v) {
+    char *b = (char *)malloc(40);
+    int n = snprintf(b, 40, "%.17g", v);
+    return _kpj_mk(b, n);
+}
+
+static inline void _kpj_w_str(kstr s) { _kpj_put(s.p, (size_t)s.n); }
 
 static int64_t _kpj_read_int(void) { return _kpj_parse_int(_kpj_next()); }
 
@@ -199,18 +302,16 @@ static int64_t _kpj_arg_int(int64_t idx) {
 
 static int64_t _kpj_argc_fn(void) { return (int64_t)(_kpj_argc > 0 ? _kpj_argc - 1 : 0); }
 
-static int64_t _kpj_print_int(int64_t v) {
+static void _kpj_w_int(int64_t v) {
     char b[24];
     char *e = b + sizeof(b);
-    *--e = '\n';
     uint64_t u = v < 0 ? (0 - (uint64_t)v) : (uint64_t)v;
     do { *--e = (char)('0' + u % 10); u /= 10; } while (u);
     if (v < 0) *--e = '-';
     _kpj_put(e, (size_t)(b + sizeof(b) - e));
-    return v;
 }
 
-static double _kpj_print_float(double v) {
+static void _kpj_w_float(double v) {
     if (v == 0) v = 0.0;
     char b[64];
     int n = 0;
@@ -218,9 +319,7 @@ static double _kpj_print_float(double v) {
         n = snprintf(b, sizeof(b) - 1, "%.*g", prec, v);
         if (prec == 17 || strtod(b, NULL) == v) break;
     }
-    b[n++] = '\n';
     _kpj_put(b, (size_t)n);
-    return v;
 }
 
 static inline int64_t _kpj_div(int64_t a, int64_t b) {
@@ -434,6 +533,9 @@ func (cg *CodeGenerator) genExpr(expr Expression) (string, CType) {
 	case *FloatLiteral:
 		return floatLit(e.Value), TFloat
 
+	case *StringLiteral:
+		return fmt.Sprintf("_kpj_mk(%s, %d)", cEscape(e.Value), len(e.Value)), TStr
+
 	case *BooleanLiteral:
 		if e.Value {
 			return "1LL", TInt
@@ -467,6 +569,22 @@ func (cg *CodeGenerator) genExpr(expr Expression) (string, CType) {
 		left, lt := cg.genExpr(e.Left)
 		right, rt := cg.genExpr(e.Right)
 		isF := lt == TFloat || rt == TFloat
+		if lt == TStr || rt == TStr {
+			ls, rs := toStr(left, lt), toStr(right, rt)
+			switch e.Operator {
+			case "+":
+				return fmt.Sprintf("_kpj_cat(%s, %s)", ls, rs), TStr
+			case "==":
+				return fmt.Sprintf("_kpj_seq(%s, %s)", ls, rs), TInt
+			case "!=":
+				return fmt.Sprintf("(!_kpj_seq(%s, %s))", ls, rs), TInt
+			case "<", ">", "<=", ">=":
+				return fmt.Sprintf("((int64_t)(_kpj_scmp(%s, %s) %s 0))", ls, rs, e.Operator), TInt
+			case "&&", "||":
+				return fmt.Sprintf("((int64_t)((%s) %s (%s)))", left, e.Operator, right), TInt
+			}
+			return "0LL", TInt
+		}
 		switch e.Operator {
 		case "+", "-", "*":
 			if isF {
@@ -544,13 +662,6 @@ func (cg *CodeGenerator) genCallExpression(ce *CallExpression) (string, CType) {
 		args[i], types[i] = cg.genExpr(a)
 	}
 
-	printOne := func(i int) string {
-		if types[i] == TFloat {
-			return fmt.Sprintf("_kpj_print_float(%s)", args[i])
-		}
-		return fmt.Sprintf("_kpj_print_int(%s)", args[i])
-	}
-
 	switch ident.Value {
 	case "read_int", "scan_int", "input_int", "read":
 		return "_kpj_read_int()", TInt
@@ -578,19 +689,52 @@ func (cg *CodeGenerator) genCallExpression(ce *CallExpression) (string, CType) {
 			return fmt.Sprintf("sqrt(%s)", convert(args[0], types[0], TFloat)), TFloat
 		}
 		return "0.0", TFloat
-	case "print", "println", "print_int", "print_float":
-		if len(args) == 0 {
-			return `(_kpj_put("\n", 1), 0LL)`, TInt
-		}
-		parts := make([]string, len(args))
+	case "print", "println", "print_int", "print_float", "print_str":
+		parts := make([]string, 0, 2*len(args)+2)
 		for i := range args {
-			parts[i] = printOne(i)
+			if i > 0 {
+				parts = append(parts, `_kpj_put(" ", 1)`)
+			}
+			switch types[i] {
+			case TFloat:
+				parts = append(parts, fmt.Sprintf("_kpj_w_float(%s)", args[i]))
+			case TStr:
+				parts = append(parts, fmt.Sprintf("_kpj_w_str(%s)", args[i]))
+			default:
+				parts = append(parts, fmt.Sprintf("_kpj_w_int(%s)", args[i]))
+			}
 		}
-		last := types[len(types)-1]
-		if len(parts) == 1 {
-			return parts[0], last
+		parts = append(parts, `_kpj_put("\n", 1)`, "0LL")
+		return "(" + strings.Join(parts, ", ") + ")", TInt
+	case "read_token", "read_word", "read_str", "read_string":
+		return "_kpj_read_token()", TStr
+	case "read_line":
+		return "_kpj_read_line()", TStr
+	case "len", "length", "strlen":
+		if len(args) >= 1 {
+			return fmt.Sprintf("_kpj_len(%s)", args[0]), TInt
 		}
-		return "(" + strings.Join(parts, ", ") + ")", last
+		return "0LL", TInt
+	case "upper", "to_upper":
+		if len(args) >= 1 {
+			return fmt.Sprintf("_kpj_upper(%s)", args[0]), TStr
+		}
+	case "lower", "to_lower":
+		if len(args) >= 1 {
+			return fmt.Sprintf("_kpj_lower(%s)", args[0]), TStr
+		}
+	case "char_at", "at":
+		if len(args) >= 2 {
+			return fmt.Sprintf("_kpj_char_at(%s, %s)", args[0], convert(args[1], types[1], TInt)), TStr
+		}
+	case "substr", "substring":
+		if len(args) >= 3 {
+			return fmt.Sprintf("_kpj_substr(%s, %s, %s)", args[0], convert(args[1], types[1], TInt), convert(args[2], types[2], TInt)), TStr
+		}
+	case "str", "to_str":
+		if len(args) >= 1 {
+			return toStr(args[0], types[0]), TStr
+		}
 	case "exit":
 		code := "0"
 		if len(args) >= 1 {
@@ -626,6 +770,7 @@ func (cg *CodeGenerator) genCallExpression(ce *CallExpression) (string, CType) {
 		}
 		return fmt.Sprintf("%s(%s)", cg.cFuncName(ident.Value), strings.Join(ints, ", ")), TInt
 	}
+	return "0LL", TInt
 }
 
 func runCC(ccBin string, args []string) (string, error) {
@@ -699,4 +844,33 @@ func CompileToBinary(program *Program, outputPath string) error {
 	}
 
 	return nil
+}
+
+func toStr(code string, t CType) string {
+	switch t {
+	case TStr:
+		return code
+	case TFloat:
+		return fmt.Sprintf("_kpj_str_float(%s)", code)
+	}
+	return fmt.Sprintf("_kpj_str_int(%s)", code)
+}
+
+func cEscape(v string) string {
+	var sb strings.Builder
+	sb.WriteByte('"')
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		switch {
+		case c == '"' || c == '\\':
+			sb.WriteByte('\\')
+			sb.WriteByte(c)
+		case c >= 32 && c < 127 && c != '?':
+			sb.WriteByte(c)
+		default:
+			fmt.Fprintf(&sb, "\\%03o", c)
+		}
+	}
+	sb.WriteByte('"')
+	return sb.String()
 }

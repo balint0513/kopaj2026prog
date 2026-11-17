@@ -1,0 +1,4 @@
+// TS009 - Float Division
+let x = read_float();
+let y = read_float();
+print(x / y);

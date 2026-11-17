@@ -1,0 +1,3 @@
+// TS011 - String Basics
+let t = read_token();
+print(len(t), upper(t), char_at(t, 0) + char_at(t, len(t) - 1), substr(t, 0, 3));

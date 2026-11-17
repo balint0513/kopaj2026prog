@@ -16,6 +16,7 @@ const (
 	TOKEN_IDENT
 	TOKEN_INT
 	TOKEN_FLOAT
+	TOKEN_STRING
 
 	// Operators & delimiters
 	TOKEN_ASSIGN   // =
@@ -60,6 +61,7 @@ func (t TokenType) String() string {
 		TOKEN_IDENT:    "IDENT",
 		TOKEN_INT:      "INT",
 		TOKEN_FLOAT:    "FLOAT",
+		TOKEN_STRING:   "STRING",
 		TOKEN_ASSIGN:   "=",
 		TOKEN_PLUS:     "+",
 		TOKEN_MINUS:    "-",
@@ -169,6 +171,8 @@ func (l *Lexer) NextToken() Token {
 	switch l.ch {
 	case 0:
 		return Token{Type: TOKEN_EOF, Literal: "", Line: l.line}
+	case '"':
+		return l.readString()
 	case '=':
 		if l.peekChar() == '=' {
 			ch := l.ch
@@ -335,4 +339,37 @@ func isDigit(ch byte) bool {
 
 func isLetterOrDigit(ch byte) bool {
 	return isLetter(ch) || isDigit(ch)
+}
+
+func (l *Lexer) readString() Token {
+	line := l.line
+	var sb []byte
+	l.readChar() // opening quote
+	for l.ch != '"' && l.ch != 0 {
+		if l.ch == '\\' {
+			l.readChar()
+			switch l.ch {
+			case 'n':
+				sb = append(sb, '\n')
+			case 't':
+				sb = append(sb, '\t')
+			case 'r':
+				sb = append(sb, '\r')
+			case '0':
+				sb = append(sb, 0)
+			default:
+				sb = append(sb, l.ch)
+			}
+		} else {
+			if l.ch == '\n' {
+				l.line++
+			}
+			sb = append(sb, l.ch)
+		}
+		l.readChar()
+	}
+	if l.ch == '"' {
+		l.readChar()
+	}
+	return Token{Type: TOKEN_STRING, Literal: string(sb), Line: line}
 }

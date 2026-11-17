@@ -73,6 +73,7 @@ func NewParser(l *Lexer) *Parser {
 	p.prefixParseFns[TOKEN_IDENT] = p.parseIdentifier
 	p.prefixParseFns[TOKEN_INT] = p.parseIntegerLiteral
 	p.prefixParseFns[TOKEN_FLOAT] = p.parseFloatLiteral
+	p.prefixParseFns[TOKEN_STRING] = p.parseStringLiteral
 	p.prefixParseFns[TOKEN_TRUE] = p.parseBooleanLiteral
 	p.prefixParseFns[TOKEN_FALSE] = p.parseBooleanLiteral
 	p.prefixParseFns[TOKEN_MINUS] = p.parsePrefixExpression
@@ -339,6 +340,10 @@ func (p *Parser) parseFloatLiteral() Expression {
 		return nil
 	}
 	return &FloatLiteral{Token: p.curToken, Value: val}
+}
+
+func (p *Parser) parseStringLiteral() Expression {
+	return &StringLiteral{Token: p.curToken, Value: p.curToken.Literal}
 }
 
 func (p *Parser) parseBooleanLiteral() Expression {

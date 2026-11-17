@@ -1,0 +1,9 @@
+// TS012 - Input Parsing & Robustness (dispatch on first token)
+let cmd = read_token();
+if (cmd == "boundary") {
+    print(read_int());
+} else if (cmd == "whitespace") {
+    print(read_int());
+} else if (cmd == "empty") {
+    print(read_int());
+}
