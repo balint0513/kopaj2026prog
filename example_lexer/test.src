@@ -1,0 +1,9 @@
+let base = 4;
+let offset = 10;
+let result = (base + offset) * 2 - 3;
+
+if (result == 25) {
+    return result * 4;
+} else {
+    return 0;
+}
