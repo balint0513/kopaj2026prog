@@ -1,0 +1,7 @@
+// TS001 - Integer Addition
+// Read two 64-bit signed integers a and b from stdin (or argv[1], argv[2])
+// and print their sum a + b as a single decimal integer.
+
+let a = read_int();
+let b = read_int();
+print(a + b);

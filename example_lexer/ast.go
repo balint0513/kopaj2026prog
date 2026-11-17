@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-// Core AST interfaces
 type Node interface {
 	TokenLiteral() string
 	String() string
@@ -22,7 +21,6 @@ type Expression interface {
 	expressionNode()
 }
 
-// Program is the root node of every AST
 type Program struct {
 	Statements []Statement
 }
@@ -45,7 +43,7 @@ func (p *Program) String() string {
 // --- Statements ---
 
 type LetStatement struct {
-	Token Token // TOKEN_LET
+	Token Token
 	Name  *Identifier
 	Value Expression
 }
@@ -56,19 +54,63 @@ func (ls *LetStatement) String() string {
 	return fmt.Sprintf("let %s = %s;", ls.Name.String(), ls.Value.String())
 }
 
+type AssignStatement struct {
+	Token Token
+	Name  *Identifier
+	Value Expression
+}
+
+func (as *AssignStatement) statementNode()       {}
+func (as *AssignStatement) TokenLiteral() string { return as.Token.Literal }
+func (as *AssignStatement) String() string {
+	return fmt.Sprintf("%s = %s;", as.Name.String(), as.Value.String())
+}
+
 type ReturnStatement struct {
-	Token       Token // TOKEN_RETURN
+	Token       Token
 	ReturnValue Expression
 }
 
 func (rs *ReturnStatement) statementNode()       {}
 func (rs *ReturnStatement) TokenLiteral() string { return rs.Token.Literal }
 func (rs *ReturnStatement) String() string {
-	return fmt.Sprintf("return %s;", rs.ReturnValue.String())
+	if rs.ReturnValue != nil {
+		return fmt.Sprintf("return %s;", rs.ReturnValue.String())
+	}
+	return "return;"
+}
+
+type WhileStatement struct {
+	Token     Token
+	Condition Expression
+	Body      *BlockStatement
+}
+
+func (ws *WhileStatement) statementNode()       {}
+func (ws *WhileStatement) TokenLiteral() string { return ws.Token.Literal }
+func (ws *WhileStatement) String() string {
+	return fmt.Sprintf("while (%s) %s", ws.Condition.String(), ws.Body.String())
+}
+
+type FunctionStatement struct {
+	Token      Token
+	Name       *Identifier
+	Parameters []*Identifier
+	Body       *BlockStatement
+}
+
+func (fs *FunctionStatement) statementNode()       {}
+func (fs *FunctionStatement) TokenLiteral() string { return fs.Token.Literal }
+func (fs *FunctionStatement) String() string {
+	params := make([]string, len(fs.Parameters))
+	for i, p := range fs.Parameters {
+		params[i] = p.String()
+	}
+	return fmt.Sprintf("fn %s(%s) %s", fs.Name.String(), strings.Join(params, ", "), fs.Body.String())
 }
 
 type ExpressionStatement struct {
-	Token      Token // First token of the expression
+	Token      Token
 	Expression Expression
 }
 
@@ -82,7 +124,7 @@ func (es *ExpressionStatement) String() string {
 }
 
 type BlockStatement struct {
-	Token      Token // TOKEN_LBRACE
+	Token      Token
 	Statements []Statement
 }
 
@@ -101,7 +143,7 @@ func (bs *BlockStatement) String() string {
 // --- Expressions ---
 
 type Identifier struct {
-	Token Token // TOKEN_IDENT
+	Token Token
 	Value string
 }
 
@@ -110,16 +152,25 @@ func (i *Identifier) TokenLiteral() string { return i.Token.Literal }
 func (i *Identifier) String() string       { return i.Value }
 
 type IntegerLiteral struct {
-	Token Token // TOKEN_INT
+	Token Token
 	Value int64
 }
 
 func (il *IntegerLiteral) expressionNode()      {}
 func (il *IntegerLiteral) TokenLiteral() string { return il.Token.Literal }
-func (il *IntegerLiteral) String() string       { return il.Token.Literal }
+func (il *IntegerLiteral) String() string       { return fmt.Sprintf("%d", il.Value) }
+
+type BooleanLiteral struct {
+	Token Token
+	Value bool
+}
+
+func (bl *BooleanLiteral) expressionNode()      {}
+func (bl *BooleanLiteral) TokenLiteral() string { return bl.Token.Literal }
+func (bl *BooleanLiteral) String() string       { return bl.Token.Literal }
 
 type PrefixExpression struct {
-	Token    Token // e.g., TOKEN_MINUS
+	Token    Token
 	Operator string
 	Right    Expression
 }
@@ -131,7 +182,7 @@ func (pe *PrefixExpression) String() string {
 }
 
 type InfixExpression struct {
-	Token    Token // Operator token, e.g., TOKEN_PLUS
+	Token    Token
 	Left     Expression
 	Operator string
 	Right    Expression
@@ -144,7 +195,7 @@ func (ie *InfixExpression) String() string {
 }
 
 type IfExpression struct {
-	Token       Token // TOKEN_IF
+	Token       Token
 	Condition   Expression
 	Consequence *BlockStatement
 	Alternative *BlockStatement
@@ -159,4 +210,20 @@ func (ie *IfExpression) String() string {
 		fmt.Fprintf(&out, " else %s", ie.Alternative.String())
 	}
 	return out.String()
+}
+
+type CallExpression struct {
+	Token     Token
+	Function  Expression
+	Arguments []Expression
+}
+
+func (ce *CallExpression) expressionNode()      {}
+func (ce *CallExpression) TokenLiteral() string { return ce.Token.Literal }
+func (ce *CallExpression) String() string {
+	args := make([]string, len(ce.Arguments))
+	for i, a := range ce.Arguments {
+		args[i] = a.String()
+	}
+	return fmt.Sprintf("%s(%s)", ce.Function.String(), strings.Join(args, ", "))
 }
