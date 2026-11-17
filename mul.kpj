@@ -1,0 +1,6 @@
+// TS003 - Integer Multiplication
+// Read two signed 64-bit integers a and b (stdin or argv) and print a * b.
+
+let a = read_int();
+let b = read_int();
+print(a * b);
