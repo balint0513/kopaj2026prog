@@ -37,7 +37,7 @@ if (cmd == "sqrt") {
     print(cos(x));
 } else if (cmd == "tan") {
     let x = read_float();
-    if (abs(cos(x)) < 0.000000001) { fail(); } else { print(tan(x)); }
+    if (abs(cos(x)) < 0.0000000001) { fail(); } else { print(tan(x)); }
 } else if (cmd == "fact") {
     let n = read_int();
     if (n < 0 || n > 20) {

@@ -204,7 +204,7 @@ func (cg *CodeGenerator) genStatement(stmt Statement) {
 			paramList = "void"
 		}
 
-		fmt.Fprintf(&cg.functions, "static int64_t %s(%s) {\n", cg.cFuncName(s.Name.Value), paramList)
+		fmt.Fprintf(&cg.functions, "static inline int64_t %s(%s) {\n", cg.cFuncName(s.Name.Value), paramList)
 		cg.indent = 1
 		for _, bodyStmt := range s.Body.Statements {
 			cg.genStatement(bodyStmt)
@@ -611,16 +611,17 @@ func CompileToBinary(program *Program, outputPath string) error {
 		return fmt.Errorf("no C compiler (gcc/clang) found in PATH")
 	}
 
-	// Primary: freestanding static binary (no libc, raw syscalls, tiny ~9KB ELF, minimal startup).
+	// Primary: freestanding static binary (no libc, raw syscalls, single-page ELF, zero startup overhead).
 	freestanding := []string{
-		"-O3", "-std=gnu11", "-w", "-pipe",
+		"-O3", "-march=x86-64-v2", "-std=gnu11", "-w", "-pipe",
 		"-DKPJ_FREESTANDING",
-		"-nostdlib", "-static", "-no-pie", "-fno-pie",
+		"-nostdlib", "-static", "-no-pie", "-fno-pie", "-fcf-protection=none",
 		"-fno-math-errno", "-fno-trapping-math",
 		"-fno-asynchronous-unwind-tables", "-fno-unwind-tables",
 		"-fno-stack-protector", "-fomit-frame-pointer", "-fno-plt",
 		"-ffunction-sections", "-fdata-sections",
-		"-Wl,--gc-sections", "-Wl,--build-id=none", "-Wl,-z,norelro", "-Wl,-n",
+		"-Wl,--gc-sections", "-Wl,--build-id=none", "-Wl,-z,norelro",
+		"-Wl,-z,noseparate-code", "-Wl,-z,max-page-size=4096",
 		"-s", "-o", outputPath, tmpPath,
 	}
 

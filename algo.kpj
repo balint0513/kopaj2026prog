@@ -2,11 +2,11 @@
 fn is_prime(n) {
     if (n < 2) { return 0; }
     if (n < 4) { return 1; }
-    if (n % 2 == 0 || n % 3 == 0) { return 0; }
-    let i = 5;
+    if (n % 2 == 0) { return 0; }
+    let i = 3;
     while (i * i <= n) {
-        if (n % i == 0 || n % (i + 2) == 0) { return 0; }
-        i = i + 6;
+        if (n % i == 0) { return 0; }
+        i = i + 2;
     }
     return 1;
 }
@@ -26,7 +26,8 @@ if (cmd == "gcd") {
     if (is_prime(n) == 1) { print("prime"); } else { print("composite"); }
 } else if (cmd == "primecount") {
     let n = read_int();
-    print(prime_pi(n));
+    let c = prime_pi(n);
+    print(c);
 } else if (cmd == "fib") {
     let n = read_int();
     let a = 0;
