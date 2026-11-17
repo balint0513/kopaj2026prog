@@ -1,0 +1,4 @@
+// TS005 - Integer Modulo (sign of the dividend)
+let a = read_int();
+let b = read_int();
+print(a % b);

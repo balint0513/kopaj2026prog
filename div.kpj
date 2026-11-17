@@ -1,0 +1,4 @@
+// TS004 - Integer Division (truncated toward zero)
+let a = read_int();
+let b = read_int();
+print(a / b);

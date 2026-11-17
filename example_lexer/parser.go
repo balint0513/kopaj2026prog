@@ -72,6 +72,7 @@ func NewParser(l *Lexer) *Parser {
 	// Prefix expressions
 	p.prefixParseFns[TOKEN_IDENT] = p.parseIdentifier
 	p.prefixParseFns[TOKEN_INT] = p.parseIntegerLiteral
+	p.prefixParseFns[TOKEN_FLOAT] = p.parseFloatLiteral
 	p.prefixParseFns[TOKEN_TRUE] = p.parseBooleanLiteral
 	p.prefixParseFns[TOKEN_FALSE] = p.parseBooleanLiteral
 	p.prefixParseFns[TOKEN_MINUS] = p.parsePrefixExpression
@@ -330,6 +331,16 @@ func (p *Parser) parseIntegerLiteral() Expression {
 	return &IntegerLiteral{Token: p.curToken, Value: val}
 }
 
+func (p *Parser) parseFloatLiteral() Expression {
+	val, err := strconv.ParseFloat(p.curToken.Literal, 64)
+	if err != nil {
+		p.errors = append(p.errors, fmt.Sprintf("line %d: could not parse %q as float",
+			p.curToken.Line, p.curToken.Literal))
+		return nil
+	}
+	return &FloatLiteral{Token: p.curToken, Value: val}
+}
+
 func (p *Parser) parseBooleanLiteral() Expression {
 	return &BooleanLiteral{Token: p.curToken, Value: p.curTokenIs(TOKEN_TRUE)}
 }
@@ -348,9 +359,15 @@ func (p *Parser) parsePrefixExpression() Expression {
 			}
 			return &IntegerLiteral{Token: tok, Value: -il.Value}
 		}
+		if fl, ok := right.(*FloatLiteral); ok {
+			return &FloatLiteral{Token: tok, Value: -fl.Value}
+		}
 	} else if op == "+" {
 		if il, ok := right.(*IntegerLiteral); ok {
 			return il
+		}
+		if fl, ok := right.(*FloatLiteral); ok {
+			return fl
 		}
 	}
 

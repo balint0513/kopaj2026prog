@@ -15,6 +15,7 @@ const (
 	// Identifiers & literals
 	TOKEN_IDENT
 	TOKEN_INT
+	TOKEN_FLOAT
 
 	// Operators & delimiters
 	TOKEN_ASSIGN   // =
@@ -58,6 +59,7 @@ func (t TokenType) String() string {
 		TOKEN_EOF:      "EOF",
 		TOKEN_IDENT:    "IDENT",
 		TOKEN_INT:      "INT",
+		TOKEN_FLOAT:    "FLOAT",
 		TOKEN_ASSIGN:   "=",
 		TOKEN_PLUS:     "+",
 		TOKEN_MINUS:    "-",
@@ -241,7 +243,33 @@ func (l *Lexer) NextToken() Token {
 	}
 
 	if isDigit(l.ch) {
-		lit := l.readWhile(isDigit)
+		start := l.pos
+		l.readWhile(isDigit)
+		isFloat := false
+		if l.ch == '.' && isDigit(l.peekChar()) {
+			isFloat = true
+			l.readChar()
+			l.readWhile(isDigit)
+		}
+		if l.ch == 'e' || l.ch == 'E' {
+			n1 := l.peekChar()
+			n2 := byte(0)
+			if l.readPos+1 < len(l.input) {
+				n2 = l.input[l.readPos+1]
+			}
+			if isDigit(n1) || ((n1 == '+' || n1 == '-') && isDigit(n2)) {
+				isFloat = true
+				l.readChar()
+				if l.ch == '+' || l.ch == '-' {
+					l.readChar()
+				}
+				l.readWhile(isDigit)
+			}
+		}
+		lit := l.input[start:l.pos]
+		if isFloat {
+			return Token{Type: TOKEN_FLOAT, Literal: lit, Line: tok.Line}
+		}
 		return Token{Type: TOKEN_INT, Literal: lit, Line: tok.Line}
 	}
 

@@ -1,0 +1,4 @@
+// TS007 - Float Subtraction
+let x = read_float();
+let y = read_float();
+print(x - y);
