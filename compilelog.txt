@@ -1,0 +1,85 @@
+TS001.kpj] Compiling TS001.kpj -> compiled-TS001
+[TS001.kpj] Compile time: 205ms
+[TS001.kpj] Exit code: 0
+[TS001.kpj] Bytecode signature check passed
+[TS001.kpj] SUCCESS: Compiled binary uploaded to compiled/cmwkpm3jo003wa1wi0l5t3foi/v4/TS001
+[sub.kpj] Compiling sub.kpj -> compiled-TS002
+[sub.kpj] Compile time: 201ms
+[sub.kpj] Exit code: 0
+[sub.kpj] Bytecode signature check passed
+[sub.kpj] SUCCESS: Compiled binary uploaded to compiled/cmwkpm3jo003wa1wi0l5t3foi/v4/TS002
+[mul.kpj] Compiling mul.kpj -> compiled-TS003
+[mul.kpj] Compile time: 192ms
+[mul.kpj] Exit code: 0
+[mul.kpj] Bytecode signature check passed
+[mul.kpj] SUCCESS: Compiled binary uploaded to compiled/cmwkpm3jo003wa1wi0l5t3foi/v4/TS003
+[div.kpj] Compiling div.kpj -> compiled-TS004
+[div.kpj] Compile time: 206ms
+[div.kpj] Exit code: 0
+[div.kpj] Bytecode signature check passed
+[div.kpj] SUCCESS: Compiled binary uploaded to compiled/cmwkpm3jo003wa1wi0l5t3foi/v4/TS004
+[mod.kpj] Compiling mod.kpj -> compiled-TS005
+[mod.kpj] Compile time: 187ms
+[mod.kpj] Exit code: 0
+[mod.kpj] Bytecode signature check passed
+[mod.kpj] SUCCESS: Compiled binary uploaded to compiled/cmwkpm3jo003wa1wi0l5t3foi/v4/TS005
+[fadd.kpj] Compiling fadd.kpj -> compiled-TS006
+[fadd.kpj] Compile time: 204ms
+[fadd.kpj] Exit code: 0
+[fadd.kpj] Bytecode signature check passed
+[fadd.kpj] SUCCESS: Compiled binary uploaded to compiled/cmwkpm3jo003wa1wi0l5t3foi/v4/TS006
+[fsub.kpj] Compiling fsub.kpj -> compiled-TS007
+[fsub.kpj] Compile time: 203ms
+[fsub.kpj] Exit code: 0
+[fsub.kpj] Bytecode signature check passed
+[fsub.kpj] SUCCESS: Compiled binary uploaded to compiled/cmwkpm3jo003wa1wi0l5t3foi/v4/TS007
+[fmul.kpj] Compiling fmul.kpj -> compiled-TS008
+[fmul.kpj] Compile time: 200ms
+[fmul.kpj] Exit code: 0
+[fmul.kpj] Bytecode signature check passed
+[fmul.kpj] SUCCESS: Compiled binary uploaded to compiled/cmwkpm3jo003wa1wi0l5t3foi/v4/TS008
+[fdiv.kpj] Compiling fdiv.kpj -> compiled-TS009
+[fdiv.kpj] Compile time: 193ms
+[fdiv.kpj] Exit code: 0
+[fdiv.kpj] Bytecode signature check passed
+[fdiv.kpj] SUCCESS: Compiled binary uploaded to compiled/cmwkpm3jo003wa1wi0l5t3foi/v4/TS009
+[cmp.kpj] Compiling cmp.kpj -> compiled-TS010
+[cmp.kpj] Compile time: 191ms
+[cmp.kpj] Exit code: 0
+[cmp.kpj] Bytecode signature check passed
+[cmp.kpj] SUCCESS: Compiled binary uploaded to compiled/cmwkpm3jo003wa1wi0l5t3foi/v4/TS010
+[str.kpj] Compiling str.kpj -> compiled-TS011
+[str.kpj] Compile time: 211ms
+[str.kpj] Exit code: 0
+[str.kpj] Bytecode signature check passed
+[str.kpj] SUCCESS: Compiled binary uploaded to compiled/cmwkpm3jo003wa1wi0l5t3foi/v4/TS011
+[parse.kpj] Compiling parse.kpj -> compiled-TS012
+[parse.kpj] Compile time: 211ms
+[parse.kpj] Exit code: 0
+[parse.kpj] Bytecode signature check passed
+[parse.kpj] SUCCESS: Compiled binary uploaded to compiled/cmwkpm3jo003wa1wi0l5t3foi/v4/TS012
+[flow.kpj] Compiling flow.kpj -> compiled-TS014
+[flow.kpj] Compile time: 216ms
+[flow.kpj] Exit code: 0
+[flow.kpj] Bytecode signature check passed
+[flow.kpj] SUCCESS: Compiled binary uploaded to compiled/cmwkpm3jo003wa1wi0l5t3foi/v4/TS014
+[cmpops.kpj] Compiling cmpops.kpj -> compiled-TS013
+[cmpops.kpj] Compile time: 219ms
+[cmpops.kpj] Exit code: 0
+[cmpops.kpj] Bytecode signature check passed
+[cmpops.kpj] SUCCESS: Compiled binary uploaded to compiled/cmwkpm3jo003wa1wi0l5t3foi/v4/TS013
+[strops.kpj] Compiling strops.kpj -> compiled-TS015
+[strops.kpj] Compile time: 224ms
+[strops.kpj] Exit code: 0
+[strops.kpj] Bytecode signature check passed
+[strops.kpj] SUCCESS: Compiled binary uploaded to compiled/cmwkpm3jo003wa1wi0l5t3foi/v4/TS015
+[algo.kpj] Compiling algo.kpj -> compiled-TS016
+[algo.kpj] Compile time: 229ms
+[algo.kpj] Exit code: 0
+[algo.kpj] Bytecode signature check passed
+[algo.kpj] SUCCESS: Compiled binary uploaded to compiled/cmwkpm3jo003wa1wi0l5t3foi/v4/TS016
+[sci.kpj] Compiling sci.kpj -> compiled-TS017
+[sci.kpj] Compile time: 231ms
+[sci.kpj] Exit code: 0
+[sci.kpj] Bytecode signature check passed
+[sci.kpj] SUCCESS: Compiled binary uploaded to compiled/cmwkpm3jo003wa1wi0l5t3foi/v4/TS017
